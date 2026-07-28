@@ -3,7 +3,7 @@ import asyncio
 import discord
 import google.generativeai as genai
 
-# 1. 初始化 Gemini API (使用 gemini-2.5-flash)
+# 1. 初始化 Gemini API
 api_key = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
 
@@ -14,10 +14,27 @@ system_prompt = (
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
-model = genai.GenerativeModel(
-    model_name="gemini-2.5-flash",
-    system_instruction=system_prompt
-)
+# 備援模型清單：一個不行就自動換下一個，直到成功為止
+MODEL_CANDIDATES = [
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+    "gemini-pro"
+]
+
+def generate_with_fallback(prompt_text):
+    for model_name in MODEL_CANDIDATES:
+        try:
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                system_instruction=system_prompt
+            )
+            response = model.generate_content(prompt_text)
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            print(f"嘗試模型 {model_name} 失敗: {e}，切換下一個...")
+            continue
+    raise Exception("所有 Gemini 模型呼叫皆失敗，請檢查 API Key 是否正確。")
 
 # 2. 初始化 Discord Bot
 intents = discord.Intents.default()
@@ -40,15 +57,12 @@ async def on_message(message):
         async with message.channel.typing():
             try:
                 loop = asyncio.get_running_loop()
-                response = await loop.run_in_executor(
+                reply_text = await loop.run_in_executor(
                     None, 
-                    lambda: model.generate_content(message.content)
+                    lambda: generate_with_fallback(message.content)
                 )
 
-                if response and response.text:
-                    await message.channel.send(response.text)
-                else:
-                    await message.channel.send("こんあくあー！阿夸剛才愣了一下，再跟我說一次好嗎？")
+                await message.channel.send(reply_text)
             except Exception as e:
                 print(f"錯誤詳情: {e}")
                 await message.channel.send(f"阿夸電腦當機啦！（錯誤：{e}）")
