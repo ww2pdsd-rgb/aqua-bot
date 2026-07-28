@@ -1,9 +1,11 @@
 import os
+import asyncio
 import discord
 import google.generativeai as genai
 
-# 1. 初始化 Gemini API (使用穩定版模型名稱)
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# 1. 初始化 Gemini API
+api_key = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=api_key)
 
 system_prompt = (
     "你是 hololive 旗下二期生的電玩女僕「湊あくあ（湊阿夸）」。"
@@ -18,12 +20,11 @@ model = genai.GenerativeModel(
     system_instruction=system_prompt
 )
 
-# 2. 初始化 Discord Bot 權限
+# 2. 初始化 Discord Bot
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-# 你的 Discord User ID
 YOUR_USER_ID = int(os.getenv("YOUR_USER_ID", "0"))
 
 @client.event
@@ -32,25 +33,26 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    # 忽略機器人自己的訊息
     if message.author == client.user:
         return
 
-    # 只回應你發出的訊息
+    # 判斷是否為你的 ID
     if message.author.id == YOUR_USER_ID:
         async with message.channel.typing():
             try:
-                # 傳送文字給 Gemini
-                response = model.generate_content(message.content)
-                
-                # 確保有文字產出才發送
+                # 使用 asyncio.to_thread 避免 Blocking 事件迴圈
+                loop = asyncio.get_running_loop()
+                response = await loop.run_in_executor(
+                    None, 
+                    lambda: model.generate_content(message.content)
+                )
+
                 if response and response.text:
                     await message.channel.send(response.text)
                 else:
-                    await message.channel.send("こんあくあー！阿夸剛才愣了一下，再跟我說一次好嗎？")
+                    await message.channel.send("こんあくあー！阿夸剛才思考過久，再跟我說一次好嗎？")
             except Exception as e:
-                print(f"Gemini API 發生錯誤: {e}")
-                await message.channel.send(f"阿夸電腦當機啦！（錯誤訊息：{e}）")
+                print(f"錯誤詳情: {e}")
+                await message.channel.send(f"阿夸電腦當機啦！（錯誤：{e}）")
 
-# 啟動 Bot
 client.run(os.getenv("DISCORD_BOT_TOKEN"))
