@@ -5,7 +5,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import discord
 import google.generativeai as genai
 
-# ================= 1. 建立假網頁讓 Render 檢查 Port 不會 Timed Out =================
+# ================= 1. Web Server 防判斷逾時 =================
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -15,10 +15,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
-    print(f"⚓︎ Web Server 啟動，監聽 Port {port}")
     server.serve_forever()
 
-# 在獨立執行緒啟動假網頁伺服器
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
 # ================= 2. 初始化 Gemini API =================
@@ -32,14 +30,15 @@ system_prompt = (
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
+# 測試最新與標準相容的模型名稱
 MODEL_CANDIDATES = [
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
-    "gemini-2.0-flash",
-    "gemini-pro"
+    "gemini-2.0-flash-exp",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-pro-latest"
 ]
 
 def generate_with_fallback(prompt_text):
+    last_error = None
     for model_name in MODEL_CANDIDATES:
         try:
             model = genai.GenerativeModel(
@@ -50,9 +49,10 @@ def generate_with_fallback(prompt_text):
             if response and response.text:
                 return response.text
         except Exception as e:
-            print(f"嘗試模型 {model_name} 失敗: {e}，切換下一個...")
+            last_error = e
+            print(f"嘗試模型 {model_name} 失敗: {e}")
             continue
-    raise Exception("所有 Gemini 模型呼叫皆失敗，請檢查 API Key 是否正確。")
+    raise Exception(f"API 金鑰無效或權限不符。最後錯誤：{last_error}")
 
 # ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
