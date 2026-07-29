@@ -4,9 +4,8 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import discord
 from google import genai
-from google.genai import types
 
-# 1. Web Server 防止 Render 判斷逾時
+# ================= 1. Web Server 防判斷逾時 =================
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -20,8 +19,10 @@ def run_dummy_server():
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-# 2. 初始化 Gemini Client
+# ================= 2. 初始化 Gemini Client (指定 v1 API) =================
 api_key = os.getenv("GEMINI_API_KEY")
+
+# 使用新版 SDK 格式初始化
 ai_client = genai.Client(api_key=api_key)
 
 system_prompt = (
@@ -32,17 +33,17 @@ system_prompt = (
 )
 
 def generate_response(prompt_text):
-    # 使用 100% 普遍支援的標準模型名稱
+    # 使用 gemini-1.5-flash
     response = ai_client.models.generate_content(
         model='gemini-1.5-flash',
         contents=prompt_text,
-        config=types.GenerateContentConfig(
-            system_instruction=system_prompt,
-        ),
+        config={
+            'system_instruction': system_prompt
+        }
     )
     return response.text
 
-# 3. 初始化 Discord Bot
+# ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
