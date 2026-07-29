@@ -31,23 +31,13 @@ system_prompt = (
 )
 
 def generate_response(prompt_text):
-    # 使用 Google 全新推薦的 Interactions API
-    try:
-        response = ai_client.interactions.create(
-            model="gemini-3.0-flash",
-            input=prompt_text,
-            system_instruction=system_prompt,
-        )
-        return response.text
-    except Exception as e:
-        # 備用嘗試：若指定名稱微調，嘗試預設 flash 互動模型
-        print(f"首選模型失敗 ({e})，切換備用模型...")
-        response = ai_client.interactions.create(
-            model="gemini-flash",
-            input=prompt_text,
-            system_instruction=system_prompt,
-        )
-        return response.text
+    # 使用 Google 官方提示的 Interactions API + gemini-2.5-flash
+    response = ai_client.interactions.create(
+        model="gemini-2.5-flash",
+        input=prompt_text,
+        system_instruction=system_prompt,
+    )
+    return response.text
 
 # ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
@@ -82,5 +72,4 @@ async def on_message(message):
                 print(f"錯誤詳情: {e}")
                 await message.channel.send(f"阿夸電腦當機啦！（錯誤：{e}）")
 
-client.run(os.getenv("DISCORD_BOT_TOKEN"))
 client.run(os.getenv("DISCORD_BOT_TOKEN"))
