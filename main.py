@@ -31,33 +31,38 @@ system_prompt = (
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
-# 自動尋找你的 API Key 當前真正支援的模型
-def get_working_model():
-    try:
-        # 列出所有可用的模型
-        available_models = [m.name for m in ai_client.models.list()]
-        print(f"⚓︎ 帳號可用的模型清單: {available_models}")
-        
-        # 優先搜尋常見的 flash 或 generateContent 支援模型
-        for m in available_models:
-            # 去掉 'models/' 字頭
-            clean_name = m.replace("models/", "")
-            if "flash" in clean_name or "gemini" in clean_name:
-                return clean_name
-                
-        if available_models:
-            return available_models[0].replace("models/", "")
-    except Exception as e:
-        print(f"無法自動取得模型清單，退回預設值: {e}")
+def get_best_model():
+    """優先嘗試標準官方 2.0 正式版，若失敗則動態查詢帳號可用清單"""
+    candidate_list = ['models/gemini-2.0-flash', 'gemini-2.0-flash']
     
-    return "gemini-2.0-flash"
+    # 先測試預設清單
+    for model_id in candidate_list:
+        try:
+            ai_client.models.get(model=model_id)
+            print(f"⚓︎ 成功確認模型可用：{model_id}")
+            return model_id
+        except Exception:
+            continue
 
-AVAILABLE_MODEL = get_working_model()
-print(f"⚓︎ 最終鎖定使用的模型: {AVAILABLE_MODEL}")
+    # 若預設失敗，從 API 自動列出當前金鑰可用的第一個模型
+    try:
+        models = list(ai_client.models.list())
+        for m in models:
+            m_name = getattr(m, 'name', str(m))
+            if 'flash' in m_name or 'gemini' in m_name:
+                print(f"⚓︎ 動態選用帳號可用模型：{m_name}")
+                return m_name
+    except Exception as e:
+        print(f"列出模型失敗: {e}")
+        
+    return 'gemini-2.0-flash'
+
+# 啟動時先鎖定最佳可用模型
+ACTIVE_MODEL = get_best_model()
 
 def generate_response(prompt_text):
     response = ai_client.models.generate_content(
-        model=AVAILABLE_MODEL,
+        model=ACTIVE_MODEL,
         contents=prompt_text,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
