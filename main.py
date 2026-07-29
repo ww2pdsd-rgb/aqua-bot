@@ -31,20 +31,20 @@ system_prompt = (
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
-# 自動測試常見的標準模型名稱，哪個成功就用哪個
-candidate_models = [
+# 候選模型清單：覆蓋新舊各種命名格式
+CANDIDATE_MODELS = [
     "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
     "gemini-1.5-flash",
-    "gemini-1.5-pro",
     "models/gemini-2.0-flash",
     "models/gemini-1.5-flash"
 ]
 
 def generate_response(prompt_text):
-    last_exception = None
+    last_error = None
     
-    # 輪詢測試，確保抓到當前 Key 能用的模型
-    for model_name in candidate_models:
+    # 自動依序嘗試，哪一個能通就直接用哪一個
+    for model_name in CANDIDATE_MODELS:
         try:
             response = ai_client.models.generate_content(
                 model=model_name,
@@ -53,13 +53,15 @@ def generate_response(prompt_text):
                     system_instruction=system_prompt,
                 ),
             )
-            return response.text
+            if response.text:
+                return response.text
         except Exception as e:
-            last_exception = e
+            last_error = e
+            print(f"嘗試模型 {model_name} 失敗: {e}")
             continue
             
-    # 如果全試過都失敗，拋出最後一個錯誤
-    raise last_exception
+    # 如果清單全失敗，拋出詳細錯誤
+    raise Exception(f"所有模型嘗試皆失敗，最後錯誤: {last_error}")
 
 # ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
