@@ -31,18 +31,35 @@ system_prompt = (
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
-# ⚠️ 請把下面這行的模型名稱，替換成你在 AI Studio 下拉選單看到的名稱（例如 "gemini-2.0-flash"）
-MODEL_NAME = "gemini-2.0-flash" 
+# 自動測試常見的標準模型名稱，哪個成功就用哪個
+candidate_models = [
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+    "models/gemini-2.0-flash",
+    "models/gemini-1.5-flash"
+]
 
 def generate_response(prompt_text):
-    response = ai_client.models.generate_content(
-        model=MODEL_NAME,
-        contents=prompt_text,
-        config=types.GenerateContentConfig(
-            system_instruction=system_prompt,
-        ),
-    )
-    return response.text
+    last_exception = None
+    
+    # 輪詢測試，確保抓到當前 Key 能用的模型
+    for model_name in candidate_models:
+        try:
+            response = ai_client.models.generate_content(
+                model=model_name,
+                contents=prompt_text,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                ),
+            )
+            return response.text
+        except Exception as e:
+            last_exception = e
+            continue
+            
+    # 如果全試過都失敗，拋出最後一個錯誤
+    raise last_exception
 
 # ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
