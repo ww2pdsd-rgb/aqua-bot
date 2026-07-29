@@ -1,9 +1,27 @@
 import os
 import asyncio
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import discord
 import google.generativeai as genai
 
-# 1. 初始化 Gemini API
+# ================= 1. 建立假網頁讓 Render 檢查 Port 不會 Timed Out =================
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Aqua Bot is Running!")
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
+    print(f"⚓︎ Web Server 啟動，監聽 Port {port}")
+    server.serve_forever()
+
+# 在獨立執行緒啟動假網頁伺服器
+threading.Thread(target=run_dummy_server, daemon=True).start()
+
+# ================= 2. 初始化 Gemini API =================
 api_key = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
 
@@ -14,10 +32,10 @@ system_prompt = (
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
-# 備援模型清單：一個不行就自動換下一個，直到成功為止
 MODEL_CANDIDATES = [
     "gemini-1.5-flash",
     "gemini-1.5-pro",
+    "gemini-2.0-flash",
     "gemini-pro"
 ]
 
@@ -36,7 +54,7 @@ def generate_with_fallback(prompt_text):
             continue
     raise Exception("所有 Gemini 模型呼叫皆失敗，請檢查 API Key 是否正確。")
 
-# 2. 初始化 Discord Bot
+# ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
@@ -52,7 +70,6 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    # 只回應你的帳號
     if message.author.id == YOUR_USER_ID:
         async with message.channel.typing():
             try:
@@ -61,7 +78,6 @@ async def on_message(message):
                     None, 
                     lambda: generate_with_fallback(message.content)
                 )
-
                 await message.channel.send(reply_text)
             except Exception as e:
                 print(f"錯誤詳情: {e}")
