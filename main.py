@@ -31,15 +31,17 @@ system_prompt = (
 )
 
 def generate_response(prompt_text):
-    # 改用 Interactions API 進行對話/內容生成
+    # 使用符合當前 SDK 與新 API 規範的 Interactions 介面
     interaction = ai_client.interactions.create(
-        model="gemini-2.5-flash",
+        model="gemini-2.5-flash-001",
         input=prompt_text,
         system_instruction=system_prompt,
     )
     
-    # 取得回傳的文字內容
-    if hasattr(interaction, 'text') and interaction.text:
+    # 相容不同 SDK 版本的回傳欄位解析
+    if hasattr(interaction, 'output_text') and interaction.output_text:
+        return interaction.output_text
+    elif hasattr(interaction, 'text') and interaction.text:
         return interaction.text
     elif hasattr(interaction, 'outputs') and interaction.outputs:
         return interaction.outputs[0].text
