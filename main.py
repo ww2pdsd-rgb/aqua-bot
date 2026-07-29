@@ -4,6 +4,7 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import discord
 from google import genai
+from google.genai import types
 
 # ================= 1. Web Server 防判斷逾時 =================
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -30,19 +31,41 @@ system_prompt = (
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
+# 自動取得可用模型名稱，避免寫死模型名噴 404
 def generate_response(prompt_text):
-    # 使用最新的 Interactions API 進行對話生成
-    response = ai_client.interactions.create(
-        model='gemini-2.5-flash',
-        input=prompt_text,
-        system_instruction=system_prompt
+    target_model = None
+    
+    # 1. 查詢該 API Key 目前允許使用的模型清單
+    try:
+        models = list(ai_client.models.list())
+        for m in models:
+            # 找到可以生成內容的模型
+            if hasattr(m, 'supported_actions') and 'generateContent' in m.supported_actions:
+                target_model = m.name
+                if 'flash' in m.name: # 優先選 flash
+                    break
+            elif hasattr(m, 'name'):
+                target_model = m.name
+                if 'flash' in m.name:
+                    break
+    except Exception as e:
+        print(f"列出模型失敗: {e}")
+
+    # 2. 如果沒查到，使用通用標準預設名稱
+    if not target_model:
+        target_model = 'gemini-1.5-flash'
+        
+    print(f"⚓︎ 最終使用模型: {target_model}")
+
+    # 3. 呼叫 API 生成回答
+    response = ai_client.models.generate_content(
+        model=target_model,
+        contents=prompt_text,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+        ),
     )
-    # 取得回傳內容
-    if hasattr(response, 'text') and response.text:
-        return response.text
-    elif hasattr(response, 'outputs') and response.outputs:
-        return response.outputs[0].text
-    return str(response)
+    return response.text
 
 # ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
