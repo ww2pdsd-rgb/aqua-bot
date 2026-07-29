@@ -20,7 +20,7 @@ def run_dummy_server():
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-# ================= 2. 初始化最新 Gemini Client =================
+# ================= 2. 初始化 Gemini Client =================
 api_key = os.getenv("GEMINI_API_KEY")
 ai_client = genai.Client(api_key=api_key)
 
@@ -32,8 +32,9 @@ system_prompt = (
 )
 
 def generate_response(prompt_text):
+    # 使用目前官方最穩定通用的 gemini-2.0-flash
     response = ai_client.models.generate_content(
-        model='gemini-2.5-flash',
+        model='gemini-2.0-flash',
         contents=prompt_text,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
