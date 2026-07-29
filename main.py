@@ -3,7 +3,8 @@ import asyncio
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import discord
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 # ================= 1. Web Server 防判斷逾時 =================
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -19,9 +20,9 @@ def run_dummy_server():
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-# ================= 2. 初始化 Gemini API =================
+# ================= 2. 初始化最新 Gemini Client =================
 api_key = os.getenv("GEMINI_API_KEY")
-genai.configure(api_key=api_key)
+ai_client = genai.Client(api_key=api_key)
 
 system_prompt = (
     "你是 hololive 旗下二期生的電玩女僕「湊あくあ（湊阿夸）」。"
@@ -30,27 +31,15 @@ system_prompt = (
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
-# 自動向 Google API 查詢你帳號下可用的 generateContent 模型
-def get_working_model():
-    try:
-        available_models = [
-            m.name for m in genai.list_models() 
-            if 'generateContent' in m.supported_generation_methods
-        ]
-        print(f"⚓︎ 帳號可用的模型列表: {available_models}")
-        
-        # 優先挑選包含 flash 的模型，如果沒有就選第一個可用的模型
-        for name in available_models:
-            if "flash" in name:
-                return genai.GenerativeModel(model_name=name, system_instruction=system_prompt)
-        
-        if available_models:
-            return genai.GenerativeModel(model_name=available_models[0], system_instruction=system_prompt)
-    except Exception as e:
-        print(f"列出模型失敗: {e}")
-    
-    # 預設備援
-    return genai.GenerativeModel(model_name="gemini-1.5-flash", system_instruction=system_prompt)
+def generate_response(prompt_text):
+    response = ai_client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=prompt_text,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+        ),
+    )
+    return response.text
 
 # ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
@@ -72,15 +61,13 @@ async def on_message(message):
         async with message.channel.typing():
             try:
                 loop = asyncio.get_running_loop()
-                model = await loop.run_in_executor(None, get_working_model)
-                
-                response = await loop.run_in_executor(
+                reply_text = await loop.run_in_executor(
                     None, 
-                    lambda: model.generate_content(message.content)
+                    lambda: generate_response(message.content)
                 )
                 
-                if response and response.text:
-                    await message.channel.send(response.text)
+                if reply_text:
+                    await message.channel.send(reply_text)
                 else:
                     await message.channel.send("こんあくあー！阿夸剛才愣了一下，再跟我說一次好嗎？")
             except Exception as e:
