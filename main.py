@@ -30,29 +30,27 @@ system_prompt = (
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
-# 測試最新與標準相容的模型名稱
-MODEL_CANDIDATES = [
-    "gemini-2.0-flash-exp",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-pro-latest"
-]
-
-def generate_with_fallback(prompt_text):
-    last_error = None
-    for model_name in MODEL_CANDIDATES:
-        try:
-            model = genai.GenerativeModel(
-                model_name=model_name,
-                system_instruction=system_prompt
-            )
-            response = model.generate_content(prompt_text)
-            if response and response.text:
-                return response.text
-        except Exception as e:
-            last_error = e
-            print(f"嘗試模型 {model_name} 失敗: {e}")
-            continue
-    raise Exception(f"API 金鑰無效或權限不符。最後錯誤：{last_error}")
+# 自動向 Google API 查詢你帳號下可用的 generateContent 模型
+def get_working_model():
+    try:
+        available_models = [
+            m.name for m in genai.list_models() 
+            if 'generateContent' in m.supported_generation_methods
+        ]
+        print(f"⚓︎ 帳號可用的模型列表: {available_models}")
+        
+        # 優先挑選包含 flash 的模型，如果沒有就選第一個可用的模型
+        for name in available_models:
+            if "flash" in name:
+                return genai.GenerativeModel(model_name=name, system_instruction=system_prompt)
+        
+        if available_models:
+            return genai.GenerativeModel(model_name=available_models[0], system_instruction=system_prompt)
+    except Exception as e:
+        print(f"列出模型失敗: {e}")
+    
+    # 預設備援
+    return genai.GenerativeModel(model_name="gemini-1.5-flash", system_instruction=system_prompt)
 
 # ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
@@ -74,11 +72,17 @@ async def on_message(message):
         async with message.channel.typing():
             try:
                 loop = asyncio.get_running_loop()
-                reply_text = await loop.run_in_executor(
+                model = await loop.run_in_executor(None, get_working_model)
+                
+                response = await loop.run_in_executor(
                     None, 
-                    lambda: generate_with_fallback(message.content)
+                    lambda: model.generate_content(message.content)
                 )
-                await message.channel.send(reply_text)
+                
+                if response and response.text:
+                    await message.channel.send(response.text)
+                else:
+                    await message.channel.send("こんあくあー！阿夸剛才愣了一下，再跟我說一次好嗎？")
             except Exception as e:
                 print(f"錯誤詳情: {e}")
                 await message.channel.send(f"阿夸電腦當機啦！（錯誤：{e}）")
