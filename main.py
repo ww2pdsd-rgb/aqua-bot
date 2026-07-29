@@ -4,7 +4,6 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import discord
 from google import genai
-from google.genai import types
 
 # ================= 1. Web Server 防判斷逾時 =================
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -32,15 +31,18 @@ system_prompt = (
 )
 
 def generate_response(prompt_text):
-    # 使用目前官方最穩定通用的 gemini-2.0-flash
-    response = ai_client.models.generate_content(
-        model='gemini-2.0-flash',
-        contents=prompt_text,
-        config=types.GenerateContentConfig(
-            system_instruction=system_prompt,
-        ),
+    # 使用最新的 Interactions API 進行對話生成
+    response = ai_client.interactions.create(
+        model='gemini-2.5-flash',
+        input=prompt_text,
+        system_instruction=system_prompt
     )
-    return response.text
+    # 取得回傳內容
+    if hasattr(response, 'text') and response.text:
+        return response.text
+    elif hasattr(response, 'outputs') and response.outputs:
+        return response.outputs[0].text
+    return str(response)
 
 # ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
