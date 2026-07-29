@@ -3,8 +3,7 @@ import asyncio
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import discord
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 
 # ================= 1. Web Server 防判斷逾時 =================
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -20,39 +19,37 @@ def run_dummy_server():
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-# ================= 2. 初始化 Gemini Client =================
+# ================= 2. 初始化 Gemini 設定 =================
 api_key = os.getenv("GEMINI_API_KEY")
-ai_client = genai.Client(api_key=api_key)
+genai.configure(api_key=api_key)
 
 system_prompt = (
     "你是 hololive 旗下二期生的電玩女僕「湊あくあ（湊阿夸）」。"
-    "你性格有點內向害羞、容易慌張，是個電玩高手但偶爾會吃癟發脾氣。"
+    "你性格有點內向害害羞、容易慌張，是個電玩高手但偶爾會吃癟發脾氣。"
     "請用可愛、充滿活力且略帶中二的少女口吻與用戶對話。"
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
 def generate_response(prompt_text):
-    # 針對 v1beta 端點優先使用 gemini-1.5-flash-latest
-    candidate_models = ['gemini-1.5-flash-latest', 'gemini-1.5-pro-latest', 'gemini-1.5-flash']
+    # 嘗試相容性最高的 model 名稱順序
+    models_to_try = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-pro']
     
-    last_error = None
-    for model_name in candidate_models:
+    last_err = None
+    for m in models_to_try:
         try:
-            response = ai_client.models.generate_content(
-                model=model_name,
-                contents=prompt_text,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                ),
+            model = genai.GenerativeModel(
+                model_name=m,
+                system_instruction=system_prompt
             )
-            return response.text
+            res = model.generate_content(prompt_text)
+            return res.text
         except Exception as e:
-            last_error = e
+            last_err = f"[{m} 失敗]: {e}"
             continue
             
-    raise last_error
+    raise Exception(last_err)
 
-# ================= 3. 初始化 Discord Bot =================
+# ================= 3. Discord Bot 初始化 =================
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
