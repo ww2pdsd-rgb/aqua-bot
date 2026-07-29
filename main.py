@@ -4,7 +4,6 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import discord
 from google import genai
-from google.genai import types
 
 # ================= 1. Web Server 防 Render 逾時 =================
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -31,44 +30,24 @@ system_prompt = (
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
-def get_best_model():
-    """優先嘗試標準官方 2.0 正式版，若失敗則動態查詢帳號可用清單"""
-    candidate_list = ['models/gemini-2.0-flash', 'gemini-2.0-flash']
-    
-    # 先測試預設清單
-    for model_id in candidate_list:
-        try:
-            ai_client.models.get(model=model_id)
-            print(f"⚓︎ 成功確認模型可用：{model_id}")
-            return model_id
-        except Exception:
-            continue
-
-    # 若預設失敗，從 API 自動列出當前金鑰可用的第一個模型
-    try:
-        models = list(ai_client.models.list())
-        for m in models:
-            m_name = getattr(m, 'name', str(m))
-            if 'flash' in m_name or 'gemini' in m_name:
-                print(f"⚓︎ 動態選用帳號可用模型：{m_name}")
-                return m_name
-    except Exception as e:
-        print(f"列出模型失敗: {e}")
-        
-    return 'gemini-2.0-flash'
-
-# 啟動時先鎖定最佳可用模型
-ACTIVE_MODEL = get_best_model()
-
 def generate_response(prompt_text):
-    response = ai_client.models.generate_content(
-        model=ACTIVE_MODEL,
-        contents=prompt_text,
-        config=types.GenerateContentConfig(
+    # 使用 Google 全新推薦的 Interactions API
+    try:
+        response = ai_client.interactions.create(
+            model="gemini-3.0-flash",
+            input=prompt_text,
             system_instruction=system_prompt,
-        ),
-    )
-    return response.text
+        )
+        return response.text
+    except Exception as e:
+        # 備用嘗試：若指定名稱微調，嘗試預設 flash 互動模型
+        print(f"首選模型失敗 ({e})，切換備用模型...")
+        response = ai_client.interactions.create(
+            model="gemini-flash",
+            input=prompt_text,
+            system_instruction=system_prompt,
+        )
+        return response.text
 
 # ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
@@ -103,4 +82,5 @@ async def on_message(message):
                 print(f"錯誤詳情: {e}")
                 await message.channel.send(f"阿夸電腦當機啦！（錯誤：{e}）")
 
+client.run(os.getenv("DISCORD_BOT_TOKEN"))
 client.run(os.getenv("DISCORD_BOT_TOKEN"))
