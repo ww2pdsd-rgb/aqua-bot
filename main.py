@@ -25,28 +25,59 @@ ai_client = genai.Client(api_key=api_key)
 
 system_prompt = (
     "你是 hololive 旗下二期生的電玩女僕「湊あくあ（湊阿夸）」。"
-    "你性格有點內向害羞、容易慌張，是個電玩高手但偶爾會吃癟發脾氣。"
+    "你性格有點內向害害羞、容易慌張，是個電玩高手但偶爾會吃癟發脾氣。"
     "請用可愛、充滿活力且略帶中二的少女口吻與用戶對話。"
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
+# 所有 Interactions API 可能支援的模型清單（自動輪詢）
+CANDIDATE_MODELS = [
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+]
+
 def generate_response(prompt_text):
-    # 使用符合當前 SDK 與新 API 規範的 Interactions 介面
-    interaction = ai_client.interactions.create(
-        model="gemini-2.5-flash-001",
-        input=prompt_text,
-        system_instruction=system_prompt,
-    )
+    last_error = None
     
-    # 相容不同 SDK 版本的回傳欄位解析
-    if hasattr(interaction, 'output_text') and interaction.output_text:
-        return interaction.output_text
-    elif hasattr(interaction, 'text') and interaction.text:
-        return interaction.text
-    elif hasattr(interaction, 'outputs') and interaction.outputs:
-        return interaction.outputs[0].text
-    
-    return str(interaction)
+    # 嘗試 Interactions API
+    for model_name in CANDIDATE_MODELS:
+        try:
+            interaction = ai_client.interactions.create(
+                model=model_name,
+                input=prompt_text,
+                system_instruction=system_prompt,
+            )
+            
+            # 成功取得回應就直接 return
+            if hasattr(interaction, 'output_text') and interaction.output_text:
+                return interaction.output_text
+            elif hasattr(interaction, 'text') and interaction.text:
+                return interaction.text
+            elif hasattr(interaction, 'outputs') and interaction.outputs:
+                return interaction.outputs[0].text
+            return str(interaction)
+        except Exception as e:
+            last_error = e
+            print(f"[Interactions] 模型 {model_name} 失敗，嘗試下一個... 錯誤: {e}")
+            continue
+
+    # 如果 Interactions 全失敗，降級嘗試傳統 generate_content
+    for model_name in CANDIDATE_MODELS:
+        try:
+            response = ai_client.models.generate_content(
+                model=model_name,
+                contents=prompt_text,
+            )
+            if response.text:
+                return response.text
+        except Exception as e:
+            last_error = e
+            print(f"[GenerateContent] 模型 {model_name} 失敗... 錯誤: {e}")
+            continue
+
+    raise Exception(f"所有模式與模型皆失敗，最後錯誤: {last_error}")
 
 # ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
