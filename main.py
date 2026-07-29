@@ -4,7 +4,6 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import discord
 from google import genai
-from google.genai import types
 
 # ================= 1. Web Server 防 Render 逾時 =================
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -31,32 +30,21 @@ system_prompt = (
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
-# 官方新版 SDK 必須帶上精確格式，否則會抓不到模型
-CANDIDATE_MODELS = [
-    "gemini-2.0-flash-exp",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-pro-latest",
-]
-
 def generate_response(prompt_text):
-    last_error = None
-    for model_name in CANDIDATE_MODELS:
-        try:
-            response = ai_client.models.generate_content(
-                model=model_name,
-                contents=prompt_text,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                ),
-            )
-            if response.text:
-                return response.text
-        except Exception as e:
-            last_error = e
-            print(f"模型 {model_name} 失敗: {e}")
-            continue
-            
-    raise Exception(f"所有模型嘗試皆失敗，最後錯誤: {last_error}")
+    # 改用 Interactions API 進行對話/內容生成
+    interaction = ai_client.interactions.create(
+        model="gemini-2.5-flash",
+        input=prompt_text,
+        system_instruction=system_prompt,
+    )
+    
+    # 取得回傳的文字內容
+    if hasattr(interaction, 'text') and interaction.text:
+        return interaction.text
+    elif hasattr(interaction, 'outputs') and interaction.outputs:
+        return interaction.outputs[0].text
+    
+    return str(interaction)
 
 # ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
