@@ -6,7 +6,7 @@ import discord
 from google import genai
 from google.genai import types
 
-# ================= 1. Web Server 防判斷逾時 =================
+# ================= 1. Web Server 防 Render 逾時 =================
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -31,26 +31,39 @@ system_prompt = (
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
-def generate_response(prompt_text):
-    # 輪流嘗試，解決各版本 API 端點名稱不相容的問題
-    candidate_models = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-2.0-flash-exp']
+# 自動尋找你的 API Key 當前真正支援的模型
+def get_working_model():
+    try:
+        # 列出所有可用的模型
+        available_models = [m.name for m in ai_client.models.list()]
+        print(f"⚓︎ 帳號可用的模型清單: {available_models}")
+        
+        # 優先搜尋常見的 flash 或 generateContent 支援模型
+        for m in available_models:
+            # 去掉 'models/' 字頭
+            clean_name = m.replace("models/", "")
+            if "flash" in clean_name or "gemini" in clean_name:
+                return clean_name
+                
+        if available_models:
+            return available_models[0].replace("models/", "")
+    except Exception as e:
+        print(f"無法自動取得模型清單，退回預設值: {e}")
     
-    last_error = None
-    for model_name in candidate_models:
-        try:
-            response = ai_client.models.generate_content(
-                model=model_name,
-                contents=prompt_text,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                ),
-            )
-            return response.text
-        except Exception as e:
-            last_error = f"[{model_name} 失敗]: {e}"
-            continue
-            
-    raise Exception(last_error)
+    return "gemini-2.0-flash"
+
+AVAILABLE_MODEL = get_working_model()
+print(f"⚓︎ 最終鎖定使用的模型: {AVAILABLE_MODEL}")
+
+def generate_response(prompt_text):
+    response = ai_client.models.generate_content(
+        model=AVAILABLE_MODEL,
+        contents=prompt_text,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+        ),
+    )
+    return response.text
 
 # ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
