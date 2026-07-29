@@ -31,52 +31,18 @@ system_prompt = (
     "常用「こんあくあー！」、「阿夸才沒有搞砸呢！」等台詞，適時使用感情動作描寫（例如：（慌張按鍵盤））。"
 )
 
-# 動態取得當前 API Key 真正擁有的可用模型清單
-def find_working_model():
-    try:
-        models = list(ai_client.models.list())
-        model_names = [m.name for m in models]
-        print(f"⚓︎ 你的 API Key 當前支援的所有模型：{model_names}")
-        
-        # 尋找名稱含有 flash 或 generateContent 的模型
-        for m in models:
-            name = m.name
-            if "flash" in name or "gemini" in name:
-                print(f"⚓︎ 自動鎖定首選模型：{name}")
-                return name
-        
-        if model_names:
-            return model_names[0]
-    except Exception as e:
-        print(f"無法獲取模型清單: {e}")
-    
-    return "models/gemini-2.0-flash"
-
-ACTIVE_MODEL = find_working_model()
+# ⚠️ 請把下面這行的模型名稱，替換成你在 AI Studio 下拉選單看到的名稱（例如 "gemini-2.0-flash"）
+MODEL_NAME = "gemini-2.0-flash" 
 
 def generate_response(prompt_text):
-    global ACTIVE_MODEL
-    try:
-        response = ai_client.models.generate_content(
-            model=ACTIVE_MODEL,
-            contents=prompt_text,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-            ),
-        )
-        return response.text
-    except Exception as e:
-        print(f"原模型 {ACTIVE_MODEL} 呼叫失敗 ({e})，重新動態尋找可用模型...")
-        # 若失敗則現場重新撈一次可用模型備援
-        ACTIVE_MODEL = find_working_model()
-        response = ai_client.models.generate_content(
-            model=ACTIVE_MODEL,
-            contents=prompt_text,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-            ),
-        )
-        return response.text
+    response = ai_client.models.generate_content(
+        model=MODEL_NAME,
+        contents=prompt_text,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+        ),
+    )
+    return response.text
 
 # ================= 3. 初始化 Discord Bot =================
 intents = discord.Intents.default()
